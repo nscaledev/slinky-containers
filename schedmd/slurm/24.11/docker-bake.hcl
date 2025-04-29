@@ -13,6 +13,10 @@ variable "SLURM_VERSION" {
   default = "24.11.4"
 }
 
+variable "ROCM_VERSION" {
+  default = "6.3.4"
+}
+
 function "format_name" {
   params = [stage, version, flavor]
   // Remove [:punct:] from string before joining elements
@@ -56,6 +60,7 @@ target "_default" {
   }
   args = {
     SLURM_VERSION = "${SLURM_VERSION}"
+    ROCM_VERSION = "${ROCM_VERSION}"
     DEBUG = "${DEBUG}"
   }
   target = stage
