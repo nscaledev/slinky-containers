@@ -22,6 +22,9 @@ ENV ROCM_VERSION=${ROCM_VERSION} \
     ROCBLAS_DIR=/opt/rocm-${ROCM_VERSION}/lib/rocblas \
     ROCM_DIR=/opt/rocm-${ROCM_VERSION}
 
+ARG LMOD_VERSION
+ENV LMOD_VERSION=${LMOD_VERSION}
+
 USER root
 WORKDIR /tmp/
 
@@ -34,7 +37,7 @@ set -xeuo pipefail
 apt-get -qq update
 apt-get -qq -y upgrade
 apt-get -qq -y install --no-install-recommends \
-  build-essential fakeroot devscripts equivs curl
+  build-essential fakeroot devscripts equivs curl bc pkg-config
 curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor > /etc/apt/keyrings/rocm.gpg
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main" >> /etc/apt/sources.list.d/rocm.list
 apt-get -qq update
@@ -54,6 +57,14 @@ find $(pwd)/patches/ -type f -name "*.patch" -print0 | sort -z | xargs -t0r -n1 
 ## Build
 mk-build-deps -ir --tool='apt-get -qq -y -o Debug::pkgProblemResolver=yes --no-install-recommends' ${SLURM_DIR}/debian/control
 ( cd $SLURM_DIR && debuild -b -uc -us >/dev/null )
+# Download and Build Lmod
+LMOD_DIR="Lmod-${LMOD_VERSION}"
+mkdir -p $LMOD_DIR
+curl -s -L -O https://github.com/TACC/Lmod/archive/refs/tags/${LMOD_VERSION}.tar.gz
+tar --strip-components=1 -xvf ${LMOD_VERSION}.tar.gz -C ${LMOD_DIR}
+## Build deb package
+mk-build-deps -ir --tool='apt-get -qq -y -o Debug::pkgProblemResolver=yes --no-install-recommends' ${LMOD_DIR}/debian/control
+( cd $LMOD_DIR && debuild -b -uc -us >/dev/null )
 ## Cleanup
 apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
@@ -242,7 +253,8 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-libpam-slurm-adopt_[0-9]*.deb \
   ./slurm-smd-libpmi2-0_[0-9]*.deb \
   ./slurm-smd-slurmd_[0-9]*.deb \
-  ./slurm-smd_[0-9]*.deb
+  ./slurm-smd_[0-9]*.deb \
+  ./lmod_[0-9]*.deb
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 cp -v /etc/nsswitch.conf{,.bak}

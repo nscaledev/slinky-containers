@@ -13,6 +13,10 @@ variable "SLURM_VERSION" {
   default = "24.11.4"
 }
 
+variable "LMOD_VERSION" {
+  default = "8.7.59"
+}
+
 variable "ROCM_VERSION" {
   default = "6.3.4"
 }
@@ -61,6 +65,7 @@ target "_default" {
   args = {
     SLURM_VERSION = "${SLURM_VERSION}"
     ROCM_VERSION = "${ROCM_VERSION}"
+    LMOD_VERSION = "${LMOD_VERSION}"
     DEBUG = "${DEBUG}"
   }
   target = stage
