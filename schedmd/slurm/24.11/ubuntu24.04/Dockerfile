@@ -17,6 +17,11 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG SLURM_VERSION
 ENV SLURM_VERSION=${SLURM_VERSION}
 
+ARG ROCM_VERSION
+ENV ROCM_VERSION=${ROCM_VERSION} \
+    ROCBLAS_DIR=/opt/rocm-${ROCM_VERSION}/lib/rocblas \
+    ROCM_DIR=/opt/rocm-${ROCM_VERSION}
+
 USER root
 WORKDIR /tmp/
 
@@ -30,6 +35,10 @@ apt-get -qq update
 apt-get -qq -y upgrade
 apt-get -qq -y install --no-install-recommends \
   build-essential fakeroot devscripts equivs curl
+curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor > /etc/apt/keyrings/rocm.gpg
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main" >> /etc/apt/sources.list.d/rocm.list
+apt-get -qq update
+apt-get install -qq -y --no-install-recommends rocm-smi-lib
 ## Download
 SLURM_DIR="slurm-${SLURM_VERSION}"
 mkdir -p $SLURM_DIR
