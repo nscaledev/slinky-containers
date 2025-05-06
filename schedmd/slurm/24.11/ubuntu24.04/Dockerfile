@@ -38,11 +38,11 @@ apt-get -qq update
 apt-get -qq -y upgrade
 apt-get -qq -y install --no-install-recommends \
   build-essential fakeroot devscripts equivs curl bc pkg-config
-curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor > /etc/apt/keyrings/rocm.gpg
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} noble main" >> /etc/apt/sources.list.d/rocm.list
-apt-get -qq update
-apt-get install -qq -y --no-install-recommends rocm-smi-lib
-## Download
+## ROCm smi lib for rsmi gres
+apt-get install -qq -y --no-install-recommends librocm-smi-dev
+# NVIDIA Management Library for nvml gres
+apt-get install -qq -y --no-install-recommends libnvidia-ml-dev
+# Download
 SLURM_DIR="slurm-${SLURM_VERSION}"
 mkdir -p $SLURM_DIR
 if [ $(curl -s -Iw '%{http_code}' -o /dev/null https://download.schedmd.com/slurm/${SLURM_DIR}.tar.bz2) -eq 200 ]; then
@@ -240,6 +240,10 @@ LABEL \
 USER root
 WORKDIR /tmp/
 
+
+# Add NVIDIA tools to PATH
+ENV PATH="${PATH}:/mnt/nvidia-gpu/sbin:/mnt/nvidia-gpu/bin"
+
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
 RUN <<EOR
 # Install Slurm Packages
@@ -255,11 +259,34 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-slurmd_[0-9]*.deb \
   ./slurm-smd_[0-9]*.deb \
   ./lmod_[0-9]*.deb
+# Install extra tools
+apt-get -qq -y install \
+  autotools-dev \
+  autoconf \
+  pkg-config \
+  libevent-dev \
+  gcc \
+  gfortran \
+  cmake \
+  wget \
+  unzip \
+  git \
+  vim \
+  tar \
+  bc
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
+mkdir -p /var/spool/slurmd
 cp -v /etc/nsswitch.conf{,.bak}
 sed -i -E "s/^passwd:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 sed -i -E "s/^group:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
+mkdir -p /etc/fish/conf.d
+rm -f /etc/profile.d/lmod.sh
+ln -s /usr/lmod/lmod/init/profile /etc/profile.d/z00_lmod.sh
+ln -s /usr/lmod/lmod/init/cshrc /etc/profile.d/z00_lmod.csh
+ln -s /usr/lmod/lmod/init/profile.fish /etc/fish/conf.d/z00_lmod.fish
+echo "/nscale/sw/modulefiles" > /usr/lmod/lmod/init/.modulespath
+echo /mnt/nvidia-gpu/lib/x86_64-linux-gnu > /etc/ld.so.conf.d/nvidia
 EOR
 
 COPY files/slurmd/ /
@@ -423,6 +450,8 @@ LABEL \
 USER root
 WORKDIR /tmp/
 
+COPY --from=build /tmp/lmod*.deb /tmp/
+
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
 RUN <<EOR
 # Install Packages
@@ -432,15 +461,39 @@ apt-get -qq -y install --no-install-recommends \
   openssh-server \
   dbus-daemon \
   authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
+# Install extra tools
+apt-get -qq -y install \
+  autotools-dev \
+  autoconf \
+  pkg-config \
+  libevent-dev \
+  gcc \
+  gfortran \
+  cmake \
+  wget \
+  unzip \
+  git \
+  vim \
+  tar \
+  bc
+# Install lmod
+apt-get -qq -y install --no-install-recommends ./lmod_[0-9]*.deb
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 mkdir -p /etc/authselect
 authselect select sssd with-mkhomedir --force
 rm -f /etc/ssh/ssh_host_*
+rm -f /etc/profile.d/lmod.sh
+mkdir -p /etc/fish/conf.d
+ln -s /usr/lmod/lmod/init/profile /etc/profile.d/z00_lmod.sh
+ln -s /usr/lmod/lmod/init/cshrc /etc/profile.d/z00_lmod.csh
+ln -s /usr/lmod/lmod/init/profile.fish /etc/fish/conf.d/z00_lmod.fish
+echo "/nscale/sw/modulefiles" > /usr/lmod/lmod/init/.modulespath
 # Remove Packages
 apt-get -qq -y remove \
   authselect
 apt-get -qq -y autoremove
+rm -rf ./*.deb
 EOR
 
 COPY files/login/ /
