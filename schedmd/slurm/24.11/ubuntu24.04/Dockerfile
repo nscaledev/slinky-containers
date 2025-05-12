@@ -261,19 +261,31 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./lmod_[0-9]*.deb
 # Install extra tools
 apt-get -qq -y install \
-  autotools-dev \
   autoconf \
-  pkg-config \
-  libevent-dev \
+  autotools-dev \
+  bc \
+  cmake \
+  g++ \
   gcc \
   gfortran \
-  cmake \
-  wget \
-  unzip \
   git \
-  vim \
+  iproute2 \
+  libevent-dev \
+  libpmix-bin \
+  libtool \
+  linux-headers-6.8.0-57-generic \
+  linux-source-6.8.0 \
+  pkg-config \
+  python3.12 \
+  python3-pip \
+  strace \
   tar \
-  bc
+  unzip \
+  vim \
+  wget \
+  xz-utils \
+  zlib1g-dev
+
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 mkdir -p /var/spool/slurmd
@@ -463,19 +475,31 @@ apt-get -qq -y install --no-install-recommends \
   authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
 # Install extra tools
 apt-get -qq -y install \
-  autotools-dev \
   autoconf \
-  pkg-config \
-  libevent-dev \
+  autotools-dev \
+  bc \
+  cmake \
+  g++ \
   gcc \
   gfortran \
-  cmake \
-  wget \
-  unzip \
   git \
-  vim \
+  iproute2 \
+  libevent-dev \
+  libpmix-bin \
+  libtool \
+  linux-headers-6.8.0-57-generic \
+  linux-source-6.8.0 \
+  pkg-config \
+  python3.12 \
+  python3-pip \
+  strace \
   tar \
-  bc
+  unzip \
+  vim \
+  wget \
+  xz-utils \
+  zlib1g-dev
+
 # Install lmod
 apt-get -qq -y install --no-install-recommends ./lmod_[0-9]*.deb
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
