@@ -502,6 +502,19 @@ apt-get -qq -y install \
 
 # Install lmod
 apt-get -qq -y install --no-install-recommends ./lmod_[0-9]*.deb
+# Install ContainerSSH Agent
+apt-get update
+apt-get -qq -y install --no-install-recommends \
+  apt-transport-https \
+  ca-certificates \
+  curl \
+  gnupg-agent \
+  software-properties-common
+curl -fsSL https://packages.containerssh.io/debian/gpg | apt-key add -
+add-apt-repository  "deb [arch=amd64] https://packages.containerssh.io/debian ./"
+apt-get -qq update
+apt-get -qq -y install --no-install-recommends containerssh-agent
+# Clean up
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 mkdir -p /etc/authselect
