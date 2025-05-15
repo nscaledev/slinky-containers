@@ -259,6 +259,11 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-slurmd_[0-9]*.deb \
   ./slurm-smd_[0-9]*.deb \
   ./lmod_[0-9]*.deb
+# Install sshd and sssd
+apt-get -qq -y install --no-install-recommends \
+  openssh-server \
+  dbus-daemon \
+  authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
 # Install extra tools
 apt-get -qq -y install \
   autoconf \
