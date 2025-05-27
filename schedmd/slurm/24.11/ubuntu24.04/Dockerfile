@@ -70,6 +70,36 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 ################################################################################
+ARG PARENT_IMAGE=ubuntu:24.04
+FROM ${PARENT_IMAGE} AS pyxis
+
+SHELL ["bash", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ARG SLURM_VERSION
+ENV SLURM_VERSION=${SLURM_VERSION}
+
+ARG PYXIS_VERSION
+
+USER root
+WORKDIR /tmp/
+
+COPY --from=build /tmp/*.deb /tmp/
+
+RUN <<EOR
+# Download and Build Pyxis Slurm plugin
+set -xeuo pipefail
+apt-get -qq update
+apt-get -qq -y upgrade
+apt-get -qq -y install --no-install-recommends build-essential ca-certificates curl debhelper devscripts
+apt-get -qq -y install --no-install-recommends ./slurm-smd-dev_24.11.4-1_amd64.deb ./slurm-smd_24.11.4-1_amd64.deb
+curl -s -L https://github.com/NVIDIA/pyxis/archive/refs/tags/v${PYXIS_VERSION}.tar.gz -o pyxis-${PYXIS_VERSION}.tar.gz
+tar xf pyxis-${PYXIS_VERSION}.tar.gz
+( cd pyxis-${PYXIS_VERSION} && make orig && make deb )
+EOR
+
+################################################################################
 FROM ${PARENT_IMAGE} AS base
 
 SHELL ["bash", "-c"]
@@ -240,6 +270,7 @@ LABEL \
 USER root
 WORKDIR /tmp/
 
+COPY --from=pyxis /tmp/nvslurm-plugin-pyxis_[0-9]*.deb /tmp/
 
 # Add NVIDIA tools to PATH
 ENV PATH="${PATH}:/mnt/nvidia-gpu/sbin:/mnt/nvidia-gpu/bin"
@@ -249,6 +280,7 @@ RUN <<EOR
 # Install Slurm Packages
 set -xeuo pipefail
 apt-get -qq update
+curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_amd64.deb
 apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-client_[0-9]*.deb \
   ./slurm-smd-dev_[0-9]*.deb \
@@ -258,7 +290,9 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-libpmi2-0_[0-9]*.deb \
   ./slurm-smd-slurmd_[0-9]*.deb \
   ./slurm-smd_[0-9]*.deb \
-  ./lmod_[0-9]*.deb
+  ./lmod_[0-9]*.deb \
+  ./nvslurm-plugin-pyxis_[0-9]*.deb \
+  ./enroot_[0-9]*.deb
 # Install extra tools
 apt-get -qq -y install \
   autoconf \
@@ -463,6 +497,7 @@ USER root
 WORKDIR /tmp/
 
 COPY --from=build /tmp/lmod*.deb /tmp/
+COPY --from=pyxis /tmp/nvslurm-plugin-pyxis_[0-9]*.deb /tmp/
 
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
 RUN <<EOR
@@ -473,6 +508,10 @@ apt-get -qq -y install --no-install-recommends \
   openssh-server \
   dbus-daemon \
   authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
+curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_amd64.deb
+apt-get -qq -y install --no-install-recommends \
+  ./nvslurm-plugin-pyxis_[0-9]*.deb \
+  ./enroot_[0-9]*.deb
 # Install extra tools
 apt-get -qq -y install \
   autoconf \
