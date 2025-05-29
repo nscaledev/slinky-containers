@@ -21,6 +21,10 @@ variable "ROCM_VERSION" {
   default = "6.3.4"
 }
 
+variable "PYXIS_VERSION" {
+  default = "0.20.0"
+}
+
 function "format_name" {
   params = [stage, version, flavor]
   // Remove [:punct:] from string before joining elements
@@ -66,6 +70,7 @@ target "_default" {
     SLURM_VERSION = "${SLURM_VERSION}"
     ROCM_VERSION = "${ROCM_VERSION}"
     LMOD_VERSION = "${LMOD_VERSION}"
+    PYXIS_VERSION = "${PYXIS_VERSION}"
     DEBUG = "${DEBUG}"
   }
   target = stage
