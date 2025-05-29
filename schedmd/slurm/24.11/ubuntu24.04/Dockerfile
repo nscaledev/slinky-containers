@@ -293,6 +293,11 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./lmod_[0-9]*.deb \
   ./nvslurm-plugin-pyxis_[0-9]*.deb \
   ./enroot_[0-9]*.deb
+# Install sshd and sssd
+apt-get -qq -y install --no-install-recommends \
+  openssh-server \
+  dbus-daemon \
+  authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
 # Install extra tools
 apt-get -qq -y install \
   autoconf \
