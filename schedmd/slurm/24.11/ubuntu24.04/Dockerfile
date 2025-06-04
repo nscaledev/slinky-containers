@@ -4,10 +4,30 @@
 
 ################################################################################
 
-ARG SLURM_VERSION=24.11.4
+ARG SLURM_VERSION=24.11-latest
+ARG SLURM_DIR="slurm-${SLURM_VERSION}"
+ARG PARENT_IMAGE=ubuntu:24.04
 
 ################################################################################
-ARG PARENT_IMAGE=ubuntu:24.04
+FROM alpine:latest AS slurm-src
+
+ARG SLURM_VERSION
+ARG SLURM_DIR
+
+WORKDIR /workspace/
+
+ADD https://download.schedmd.com/slurm/${SLURM_DIR}.tar.bz2 ${SLURM_DIR}.tar.bz2
+
+RUN <<EOR
+# Unpack Slurm Source
+set -xeuo pipefail
+apk add --no-cache tar
+mkdir -p ${SLURM_DIR}
+tar --strip-components=1 -jxvf ${SLURM_DIR}.tar.bz2 -C ${SLURM_DIR}
+rm ${SLURM_DIR}.tar.bz2
+EOR
+
+################################################################################
 FROM ${PARENT_IMAGE} AS build
 
 SHELL ["bash", "-c"]
@@ -16,6 +36,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ARG SLURM_VERSION
 ENV SLURM_VERSION=${SLURM_VERSION}
+ARG SLURM_DIR
 
 ARG ROCM_VERSION
 ENV ROCM_VERSION=${ROCM_VERSION} \
@@ -28,11 +49,13 @@ ENV LMOD_VERSION=${LMOD_VERSION}
 USER root
 WORKDIR /tmp/
 
+COPY --from=slurm-src /workspace/${SLURM_DIR} ${SLURM_DIR}
+
 COPY patches/ patches/
 
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#debuild
 RUN <<EOR
-# Download and Build Slurm
+# Patch and Build Slurm
 set -xeuo pipefail
 apt-get -qq update
 apt-get -qq -y upgrade
@@ -53,7 +76,7 @@ else
   tar --strip-components=1 -zxvf ${SLURM_VERSION}.tar.gz -C $SLURM_DIR
 fi
 ## Patch
-find $(pwd)/patches/ -type f -name "*.patch" -print0 | sort -z | xargs -t0r -n1 patch -p1 -d $SLURM_DIR -i
+find $(pwd)/patches/ -type f -name "*.patch" -print0 | sort -z | xargs -t0r -n1 patch -p1 -d ${SLURM_DIR} -i
 ## Build
 mk-build-deps -ir --tool='apt-get -qq -y -o Debug::pkgProblemResolver=yes --no-install-recommends' ${SLURM_DIR}/debian/control
 ( cd $SLURM_DIR && debuild -b -uc -us >/dev/null )
@@ -70,34 +93,34 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 ################################################################################
-ARG PARENT_IMAGE=ubuntu:24.04
-FROM ${PARENT_IMAGE} AS pyxis
-
-SHELL ["bash", "-c"]
-
-ARG DEBIAN_FRONTEND=noninteractive
-
-ARG SLURM_VERSION
-ENV SLURM_VERSION=${SLURM_VERSION}
-
-ARG PYXIS_VERSION
-
-USER root
-WORKDIR /tmp/
-
-COPY --from=build /tmp/*.deb /tmp/
-
-RUN <<EOR
-# Download and Build Pyxis Slurm plugin
-set -xeuo pipefail
-apt-get -qq update
-apt-get -qq -y upgrade
-apt-get -qq -y install --no-install-recommends build-essential ca-certificates curl debhelper devscripts
-apt-get -qq -y install --no-install-recommends ./slurm-smd-dev_24.11.4-1_amd64.deb ./slurm-smd_24.11.4-1_amd64.deb
-curl -s -L https://github.com/NVIDIA/pyxis/archive/refs/tags/v${PYXIS_VERSION}.tar.gz -o pyxis-${PYXIS_VERSION}.tar.gz
-tar xf pyxis-${PYXIS_VERSION}.tar.gz
-( cd pyxis-${PYXIS_VERSION} && make orig && make deb )
-EOR
+#ARG PARENT_IMAGE=ubuntu:24.04
+#FROM ${PARENT_IMAGE} AS pyxis
+#
+#SHELL ["bash", "-c"]
+#
+#ARG DEBIAN_FRONTEND=noninteractive
+#
+#ARG SLURM_VERSION
+#ENV SLURM_VERSION=${SLURM_VERSION}
+#
+#ARG PYXIS_VERSION
+#
+#USER root
+#WORKDIR /tmp/
+#
+#COPY --from=build /tmp/*.deb /tmp/
+#
+#RUN <<EOR
+## Download and Build Pyxis Slurm plugin
+#set -xeuo pipefail
+#apt-get -qq update
+#apt-get -qq -y upgrade
+#apt-get -qq -y install --no-install-recommends build-essential ca-certificates curl debhelper devscripts
+#apt-get -qq -y install --no-install-recommends ./slurm-smd-dev_24.11.4-1_amd64.deb ./slurm-smd_24.11.4-1_amd64.deb
+#curl -s -L https://github.com/NVIDIA/pyxis/archive/refs/tags/v${PYXIS_VERSION}.tar.gz -o pyxis-${PYXIS_VERSION}.tar.gz
+#tar xf pyxis-${PYXIS_VERSION}.tar.gz
+#( cd pyxis-${PYXIS_VERSION} && make orig && make deb )
+#EOR
 
 ################################################################################
 FROM ${PARENT_IMAGE} AS base
@@ -108,23 +131,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ARG SLURM_VERSION
 ENV SLURM_VERSION=${SLURM_VERSION}
-
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.authors="slinky@schedmd.com" \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/documentation.html" \
-  org.opencontainers.image.license="GPL-2.0-or-later WITH openssl-exception" \
-  org.opencontainers.image.vendor="SchedMD LLC." \
-  org.opencontainers.image.version="${SLURM_VERSION}" \
-  org.opencontainers.image.source="https://github.com/SlinkyProject/containers"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  vendor="SchedMD LLC." \
-  version="${SLURM_VERSION}" \
-  release="https://github.com/SlinkyProject/containers"
 
 USER root
 WORKDIR /tmp/
@@ -155,47 +161,11 @@ RUN <<EOR
 set -xeuo pipefail
 apt-get -qq update
 apt-get -qq -y upgrade
-# For: Helm Chart
-apt-get -qq -y install --no-install-recommends \
-  rsync gettext-base iputils-ping
 # Init System
 apt-get -qq -y install --no-install-recommends \
   supervisor tini
 apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
-
-ENV KUBECTL_VERSION=1.32
-
-# Ref: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management
-RUN <<EOR
-# Install kubectl
-set -xeuo pipefail
-apt-get -qq update
-apt-get -qq -y install --no-install-recommends \
-  apt-transport-https ca-certificates curl gnupg
-mkdir -p -m 755 /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
-chmod 644 /etc/apt/sources.list.d/kubernetes.list
-apt-get -qq update
-apt-get -qq -y install --no-install-recommends kubectl
-apt-get clean && rm -rf /var/lib/apt/lists/*
-EOR
-
-## START DEBUG SECTION ###
-ARG DEBUG=0
-RUN <<EOR
-# For: Development and Debugging
-set -xeuo pipefail
-if [ "$DEBUG" = true ] || [ "$DEBUG" = 1 ]; then
-  apt-get -qq update
-  apt-get -qq -y install --no-install-recommends sudo
-  echo "${SLURM_USER} ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/slurm
-  apt-get clean && rm -rf /var/lib/apt/lists/*
-fi
-EOR
-### END DEBUG SECTION ###
 
 ################################################################################
 # SLURM: slurmctld
@@ -206,20 +176,6 @@ FROM base AS slurmctld
 SHELL ["bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
-
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.title="Slurm Control Plane" \
-  org.opencontainers.image.description="slurmctld - The central management daemon of Slurm" \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/slurmctld.html"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  name="Slurm Control Plane" \
-  summary="slurmctld - The central management daemon of Slurm" \
-  description="slurmctld - The central management daemon of Slurm"
 
 USER root
 WORKDIR /tmp/
@@ -253,24 +209,10 @@ SHELL ["bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.title="Slurm Worker Agent" \
-  org.opencontainers.image.description="slurmd - The compute node daemon for Slurm" \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/slurmd.html"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  name="Slurm Worker Agent" \
-  summary="slurmd - The compute node daemon for Slurm" \
-  description="slurmd - The compute node daemon for Slurm"
-
 USER root
 WORKDIR /tmp/
 
-COPY --from=pyxis /tmp/nvslurm-plugin-pyxis_[0-9]*.deb /tmp/
+#COPY --from=pyxis /tmp/nvslurm-plugin-pyxis_[0-9]*.deb /tmp/
 
 # Add NVIDIA tools to PATH
 ENV PATH="${PATH}:/mnt/nvidia-gpu/sbin:/mnt/nvidia-gpu/bin"
@@ -280,8 +222,9 @@ RUN <<EOR
 # Install Slurm Packages
 set -xeuo pipefail
 apt-get -qq update
-curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_amd64.deb
+#curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_amd64.deb
 apt-get -qq -y install --no-install-recommends --fix-broken \
+  gawk \
   ./slurm-smd-client_[0-9]*.deb \
   ./slurm-smd-dev_[0-9]*.deb \
   ./slurm-smd-doc_[0-9]*.deb \
@@ -290,9 +233,9 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-libpmi2-0_[0-9]*.deb \
   ./slurm-smd-slurmd_[0-9]*.deb \
   ./slurm-smd_[0-9]*.deb \
-  ./lmod_[0-9]*.deb \
-  ./nvslurm-plugin-pyxis_[0-9]*.deb \
-  ./enroot_[0-9]*.deb
+  ./lmod_[0-9]*.deb
+  #./nvslurm-plugin-pyxis_[0-9]*.deb \
+  #./enroot_[0-9]*.deb
 # Install sshd and sssd
 apt-get -qq -y install --no-install-recommends \
   openssh-server \
@@ -327,7 +270,7 @@ apt-get -qq -y install \
 
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
-mkdir -p /var/spool/slurmd
+mkdir -p /var/spool/slurmd/
 cp -v /etc/nsswitch.conf{,.bak}
 sed -i -E "s/^passwd:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 sed -i -E "s/^group:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
@@ -354,20 +297,6 @@ FROM base AS slurmdbd
 SHELL ["bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
-
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.title="Slurm Database Agent" \
-  org.opencontainers.image.description="slurmdbd - Slurm Database Daemon" \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/slurmdbd.html"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  name="Slurm Database Agent" \
-  summary="slurmdbd - Slurm Database Daemon" \
-  description="slurmdbd - Slurm Database Daemon"
 
 USER root
 WORKDIR /tmp/
@@ -396,20 +325,6 @@ FROM base AS slurmrestd
 SHELL ["bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
-
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.title="Slurm REST API Agent" \
-  org.opencontainers.image.description="slurmrestd - Interface to Slurm via REST API" \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/slurmrestd.html"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  name="Slurm REST API Agent" \
-  summary="slurmrestd - Interface to Slurm via REST API" \
-  description="slurmrestd - Interface to Slurm via REST API"
 
 USER root
 WORKDIR /tmp/
@@ -440,22 +355,27 @@ SHELL ["bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.title="Slurm Auth/Cred Server" \
-  org.opencontainers.image.description="sackd - Slurm Auth and Cred Kiosk Daemon" \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/sackd.html"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  name="Slurm Auth/Cred Server" \
-  summary="sackd - Slurm Auth and Cred Kiosk Daemon" \
-  description="sackd - Slurm Auth and Cred Kiosk Daemon"
-
 USER root
 WORKDIR /tmp/
+
+ENV KUBECTL_VERSION=1.33
+
+# Ref: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management
+RUN <<EOR
+# Install kubectl
+set -xeuo pipefail
+apt-get -qq update
+apt-get -qq -y install --no-install-recommends \
+  apt-transport-https ca-certificates curl gnupg
+mkdir -p -m 755 /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+chmod 644 /etc/apt/sources.list.d/kubernetes.list
+apt-get -qq update
+apt-get -qq -y install --no-install-recommends kubectl
+apt-get clean && rm -rf /var/lib/apt/lists/*
+EOR
 
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
 RUN <<EOR
@@ -467,7 +387,12 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-doc_[0-9]*.deb \
   ./slurm-smd-sackd_[0-9]*.deb \
   ./slurm-smd_[0-9]*.deb
+# For: Helm Chart
+apt-get -qq -y install --no-install-recommends \
+  rsync gettext-base iputils-ping
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Prepare Directories
+mkdir -p /run/slurm/
 EOR
 
 COPY files/sackd/ /
@@ -484,25 +409,11 @@ SHELL ["bash", "-c"]
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# OCI Annotations
-# https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-LABEL \
-  org.opencontainers.image.title="Slurm Login Container" \
-  org.opencontainers.image.description="An authenticated environment to submit Slurm workload from." \
-  org.opencontainers.image.documentation="https://slurm.schedmd.com/quickstart_admin.html#login"
-
-# HasRequiredLabel requirement from Red Hat OpenShift Software Certification
-# https://access.redhat.com/documentation/en-us/red_hat_software_certification/2024/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-LABEL \
-  name="Slurm Login Container" \
-  summary="An authenticated environment to submit Slurm workload from." \
-  description="An authenticated environment to submit Slurm workload from."
-
 USER root
 WORKDIR /tmp/
 
 COPY --from=build /tmp/lmod*.deb /tmp/
-COPY --from=pyxis /tmp/nvslurm-plugin-pyxis_[0-9]*.deb /tmp/
+#COPY --from=pyxis /tmp/nvslurm-plugin-pyxis_[0-9]*.deb /tmp/
 
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
 RUN <<EOR
@@ -512,11 +423,12 @@ apt-get -qq update
 apt-get -qq -y install --no-install-recommends \
   openssh-server \
   dbus-daemon \
+  oddjob-mkhomedir \
   authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
-curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_amd64.deb
-apt-get -qq -y install --no-install-recommends \
-  ./nvslurm-plugin-pyxis_[0-9]*.deb \
-  ./enroot_[0-9]*.deb
+#curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.5.0/enroot_3.5.0-1_amd64.deb
+#apt-get -qq -y install --no-install-recommends \
+#  ./nvslurm-plugin-pyxis_[0-9]*.deb \
+#  ./enroot_[0-9]*.deb
 # Install extra tools
 apt-get -qq -y install \
   autoconf \
