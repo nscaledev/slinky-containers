@@ -90,9 +90,20 @@ ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}
 
 RUN chmod 755 -R /etc/enroot/hooks.d/
 
+ADD https://nvidia.github.io/libnvidia-container/gpgkey libnvidia-container.gpgkey
+ADD https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# Ref: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#with-apt-ubuntu-debian
 RUN <<EOR
-# Install ibverbs and requirements
+# Install Nvidia Container Toolkit
 set -xeuo pipefail
+gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg ./libnvidia-container.gpgkey
+sed -i 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' /etc/apt/sources.list.d/nvidia-container-toolkit.list
+apt-get -qq update
+apt-get -qq -y install --no-install-recommends \
+  nvidia-container-toolkit
+rm *.gpgkey && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install IB packages
 apt-get -qq update
 apt-get -qq -y upgrade
 apt-get -qq -y install --no-install-recommends --fix-broken \
@@ -148,3 +159,18 @@ ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}
 ADD https://raw.githubusercontent.com/NVIDIA/enroot/refs/tags/v${ENROOT_VERSION}/conf/hooks/extra/50-slurm-pytorch.sh /etc/enroot/hooks.d/50-slurm-pytorch.sh
 
 RUN chmod 755 -R /etc/enroot/hooks.d/
+
+ADD https://nvidia.github.io/libnvidia-container/gpgkey libnvidia-container.gpgkey
+ADD https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# Ref: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#with-apt-ubuntu-debian
+RUN <<EOR
+# Install Nvidia Container Toolkit
+set -xeuo pipefail
+gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg ./libnvidia-container.gpgkey
+sed -i 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' /etc/apt/sources.list.d/nvidia-container-toolkit.list
+apt-get -qq update
+apt-get -qq -y install --no-install-recommends \
+  nvidia-container-toolkit
+rm *.gpgkey && apt-get clean && rm -rf /var/lib/apt/lists/*
+EOR
