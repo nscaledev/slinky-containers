@@ -52,16 +52,16 @@ function "format_tag" {
 target "_slurm" {
   labels = {
     # Ref: https://github.com/opencontainers/image-spec/blob/v1.0/annotations.md
-    "org.opencontainers.image.authors" = "slinky@schedmd.com"
+    "org.opencontainers.image.authors" = "Ncale"
     "org.opencontainers.image.documentation" = "https://slurm.schedmd.com/documentation.html"
     "org.opencontainers.image.license" = "GPL-2.0-or-later WITH openssl-exception"
-    "org.opencontainers.image.vendor" = "SchedMD LLC."
+    "org.opencontainers.image.vendor" = "Nscale"
     "org.opencontainers.image.version" = "${slurm_version}"
-    "org.opencontainers.image.source" = "https://github.com/SlinkyProject/containers"
+    "org.opencontainers.image.source" = "https://github.com/nscaledev/slinky-containers"
     # Ref: https://docs.redhat.com/en/documentation/red_hat_software_certification/2025/html/red_hat_openshift_software_certification_policy_guide/assembly-requirements-for-container-images_openshift-sw-cert-policy-introduction#con-image-metadata-requirements_openshift-sw-cert-policy-container-images
-    "vendor" = "SchedMD LLC."
+    "vendor" = "Nscale"
     "version" = "${slurm_version}"
-    "release" = "https://github.com/SlinkyProject/containers"
+    "release" = "https://github.com/nscaledev/slinky-containers"
   }
 }
 
