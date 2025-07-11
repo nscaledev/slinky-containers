@@ -1,0 +1,11 @@
+--- a/etc/enroot/hooks.d/98-nvidia.sh	2025-07-11 08:06:14.273411900 +0000
++++ b/etc/enroot/hooks.d/98-nvidia.sh	2025-07-11 08:06:33.717631606 +0000
+@@ -27,7 +27,7 @@
+     [ -v "${key}" ] || export "${key}=${value}"
+ done || :
+ 
+-cli_args=("--no-cgroups" "--ldconfig=@$(command -v ldconfig.real || command -v ldconfig)")
++cli_args=("--no-cgroups" "--ldconfig=$(command -v ldconfig.real || command -v ldconfig)")
+ 
+ # https://github.com/nvidia/nvidia-container-runtime#nvidia_visible_devices
+ if [ "${NVIDIA_VISIBLE_DEVICES:-void}" = "void" ]; then
