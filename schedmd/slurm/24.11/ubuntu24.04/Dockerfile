@@ -134,6 +134,10 @@ ARG SLURM_USER=slurm
 ARG SLURM_USER_UID=401
 ARG SLURM_USER_GID=401
 
+ARG HPC_USER=hpc
+ARG HPC_USER_UID=2000
+ARG HPC_USER_GID=2000
+
 RUN <<EOR
 # Create SlurmUser
 set -xeuo pipefail
@@ -147,6 +151,9 @@ set -xeuo pipefail
 for user in $(ls /home/); do
   userdel --remove $user
 done
+# Create hpc user
+groupadd --gid=${HPC_USER_GID} ${HPC_USER}
+useradd --uid=${HPC_USER_UID} --gid=${HPC_USER_GID} --shell=/usr/bin/bash ${HPC_USER}
 EOR
 
 COPY --from=build /tmp/*.deb /tmp/
@@ -470,6 +477,7 @@ rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 mkdir -p /etc/authselect
 authselect select sssd with-mkhomedir --force
+echo "session     required    pam_oddjob_mkhomedir.so umask=0077" > /etc/pam.d/nscale
 rm -f /etc/ssh/ssh_host_*
 rm -f /etc/profile.d/lmod.sh
 mkdir -p /etc/fish/conf.d
