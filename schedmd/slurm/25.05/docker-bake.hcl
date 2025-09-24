@@ -15,10 +15,6 @@ slurm_version = "25.05.3"
 variable "LMOD_VERSION" {
   default = "8.7.59"
 }
-
-variable "PYXIS_VERSION" {
-  default = "0.20.0"
-}
 # end Nscale: set required versions
 
 function "slurm_semantic_version" {
@@ -307,7 +303,6 @@ target "_ubuntu2404" {
   args = {
     SLURM_VERSION = "${slurm_version}"
     LMOD_VERSION = "${LMOD_VERSION}"
-    PYXIS_VERSION = "${PYXIS_VERSION}"
   }
 }
 
