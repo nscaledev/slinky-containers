@@ -11,6 +11,12 @@ variable "DOCKER_BAKE_SUFFIX" {}
 
 slurm_version = "25.05.3"
 
+# Nscale: set required versions
+variable "LMOD_VERSION" {
+  default = "8.7.59"
+}
+# end Nscale: set required versions
+
 function "slurm_semantic_version" {
   params = [version]
   result = regex("^(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)(?:-(?<rev>.+))?$", "${version}")
@@ -296,6 +302,7 @@ target "_ubuntu2404" {
   context = "ubuntu24.04"
   args = {
     SLURM_VERSION = "${slurm_version}"
+    LMOD_VERSION = "${LMOD_VERSION}"
   }
 }
 
