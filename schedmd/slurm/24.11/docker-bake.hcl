@@ -9,7 +9,7 @@ variable "DOCKER_BAKE_REGISTRY" {
 
 variable "DOCKER_BAKE_SUFFIX" {}
 
-slurm_version = "24.11.5"
+slurm_version = "24.11.6"
 
 variable "LMOD_VERSION" {
   default = "8.7.59"
@@ -335,8 +335,8 @@ target "slurmd_ubuntu2404" {
   inherits = ["_slurmd", "_ubuntu2404"]
   target = "slurmd"
   tags = [
-    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd-base", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
-    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd-base", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
   ]
 }
 
@@ -371,8 +371,8 @@ target "login_ubuntu2404" {
   inherits = ["_login", "_ubuntu2404"]
   target = "login"
   tags = [
-    format_tag("${DOCKER_BAKE_REGISTRY}", "login-base", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
-    format_tag("${DOCKER_BAKE_REGISTRY}", "login-base", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "login", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "login", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
   ]
 }
 
@@ -390,8 +390,8 @@ target "slurmd_pyxis_ubuntu2404" {
   dockerfile = "Dockerfile.pyxis"
   target = "slurmd-pyxis"
   tags = [
-    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
-    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd-pyxis", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "slurmd-pyxis", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
   ]
   contexts = {
     "ghcr.io/slinkyproject/slurmd:24.11-ubuntu24.04" = "target:slurmd_ubuntu2404"
@@ -403,8 +403,8 @@ target "login_pyxis_ubuntu2404" {
   dockerfile = "Dockerfile.pyxis"
   target = "login-pyxis"
   tags = [
-    format_tag("${DOCKER_BAKE_REGISTRY}", "login", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
-    format_tag("${DOCKER_BAKE_REGISTRY}", "login", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "login-pyxis", "${slurm_version("${slurm_version}")}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
+    format_tag("${DOCKER_BAKE_REGISTRY}", "login-pyxis", "${slurm_version}", "ubuntu24.04", "${DOCKER_BAKE_SUFFIX}", "${tag_timestamp()}"),
   ]
   contexts = {
     "ghcr.io/slinkyproject/slurmd:24.11-ubuntu24.04" = "target:slurmd_ubuntu2404"

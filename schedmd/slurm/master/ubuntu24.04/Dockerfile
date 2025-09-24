@@ -108,6 +108,22 @@ apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 ################################################################################
+FROM base AS base-extra
+
+SHELL ["bash", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN <<EOR
+# Install Extra Packages
+set -xeuo pipefail
+apt-get -qq update
+apt-get -qq -y install --no-install-recommends \
+  openmpi-bin
+apt-get clean && rm -rf /var/lib/apt/lists/*
+EOR
+
+################################################################################
 # SLURM: slurmctld
 # BUILD: `docker build --target=slurmctld -t [<registry>/]slurmctld:<tag> .`
 ################################################################################
@@ -134,7 +150,8 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
-COPY files/slurmctld/ /
+COPY files/slurmctld/etc/supervisor/* /etc/supervisor/
+COPY files/slurmctld/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 6817/tcp
 ENTRYPOINT ["entrypoint.sh"]
@@ -143,7 +160,7 @@ ENTRYPOINT ["entrypoint.sh"]
 # SLURM: slurmd
 # BUILD: `docker build --target=slurmd -t [<registry>/]slurmd:<tag> .`
 ################################################################################
-FROM base AS slurmd
+FROM base-extra AS slurmd
 
 SHELL ["bash", "-c"]
 
@@ -175,7 +192,8 @@ sed -i -E "s/^passwd:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 sed -i -E "s/^group:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 EOR
 
-COPY files/slurmd/ /
+COPY files/slurmd/etc/supervisor/* /etc/supervisor/
+COPY files/slurmd/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 6818/tcp
 ENTRYPOINT ["entrypoint.sh"]
@@ -241,7 +259,7 @@ CMD ["0.0.0.0:6820"]
 # SLURM: sackd
 # BUILD: `docker build --target=sackd -t [<registry>/]sackd:<tag> .`
 ################################################################################
-FROM base AS sackd
+FROM base-extra AS sackd
 
 SHELL ["bash", "-c"]
 
@@ -250,23 +268,24 @@ ARG DEBIAN_FRONTEND=noninteractive
 USER root
 WORKDIR /tmp/
 
-ENV KUBECTL_VERSION=1.33
+ADD https://dl.k8s.io/release/stable.txt kubernetes_stable.txt
 
 # Ref: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management
 RUN <<EOR
 # Install kubectl
 set -xeuo pipefail
 apt-get -qq update
+VERSION="$(cat kubernetes_stable.txt | grep -Eo '^v[0-9]+\.[0-9]+')"
 apt-get -qq -y install --no-install-recommends \
   apt-transport-https ca-certificates curl gnupg
 mkdir -p -m 755 /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+curl -fsSL https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
 chmod 644 /etc/apt/sources.list.d/kubernetes.list
 apt-get -qq update
 apt-get -qq -y install --no-install-recommends kubectl
-apt-get clean && rm -rf /var/lib/apt/lists/*
+rm *.txt && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
@@ -285,7 +304,8 @@ apt-get -qq -y install --no-install-recommends \
 rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
-COPY files/sackd/ /
+COPY files/sackd/etc/supervisor/* /etc/supervisor/
+COPY files/sackd/usr/local/bin/* /usr/local/bin/
 
 ENTRYPOINT ["entrypoint.sh"]
 
@@ -317,13 +337,10 @@ rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
 mkdir -p /etc/authselect
 authselect select sssd with-mkhomedir --force
 rm -f /etc/ssh/ssh_host_*
-# Remove Packages
-apt-get -qq -y remove \
-  authselect
-apt-get -qq -y autoremove
 EOR
 
-COPY files/login/ /
+COPY files/login/etc/supervisor/* /etc/supervisor/
+COPY files/login/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 22/tcp
 ENTRYPOINT ["entrypoint.sh"]

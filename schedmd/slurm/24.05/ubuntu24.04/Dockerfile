@@ -87,6 +87,7 @@ useradd --system --no-log-init --uid=${SLURM_USER_UID} --gid=${SLURM_USER_GID} -
 EOR
 
 COPY --from=build /tmp/*.deb /tmp/
+COPY --from=build /tmp/*.ddeb /tmp/
 
 RUN <<EOR
 # Install Dependencies
@@ -102,23 +103,24 @@ apt-get -qq -y install --no-install-recommends \
 apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
-ENV KUBECTL_VERSION=1.33
+ADD https://dl.k8s.io/release/stable.txt kubernetes_stable.txt
 
 # Ref: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management
 RUN <<EOR
 # Install kubectl
 set -xeuo pipefail
 apt-get -qq update
+VERSION="$(cat kubernetes_stable.txt | grep -Eo '^v[0-9]+\.[0-9]+')"
 apt-get -qq -y install --no-install-recommends \
   apt-transport-https ca-certificates curl gnupg
 mkdir -p -m 755 /etc/apt/keyrings
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+curl -fsSL https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${VERSION}/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
 chmod 644 /etc/apt/sources.list.d/kubernetes.list
 apt-get -qq update
 apt-get -qq -y install --no-install-recommends kubectl
-apt-get clean && rm -rf /var/lib/apt/lists/*
+rm *.txt && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 ################################################################################
@@ -141,14 +143,18 @@ set -xeuo pipefail
 apt-get -qq update
 apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-client_[0-9]*.deb \
+  ./slurm-smd-client-dbgsym_[0-9]*.ddeb \
   ./slurm-smd-dev_[0-9]*.deb \
   ./slurm-smd-doc_[0-9]*.deb \
   ./slurm-smd-slurmctld_[0-9]*.deb \
-  ./slurm-smd_[0-9]*.deb
-rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
+  ./slurm-smd-slurmctld-dbgsym_[0-9]*.ddeb \
+  ./slurm-smd_[0-9]*.deb \
+  ./slurm-smd-dbgsym_[0-9]*.ddeb
+rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
-COPY files/slurmctld/ /
+COPY files/slurmctld/etc/supervisor/* /etc/supervisor/
+COPY files/slurmctld/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 6817/tcp
 ENTRYPOINT ["entrypoint.sh"]
@@ -176,11 +182,14 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-dev_[0-9]*.deb \
   ./slurm-smd-doc_[0-9]*.deb \
   ./slurm-smd-libnss-slurm_[0-9]*.deb \
+  ./slurm-smd-libnss-slurm-dbgsym_[0-9]*.ddeb \
   ./slurm-smd-libpam-slurm-adopt_[0-9]*.deb \
   ./slurm-smd-libpmi2-0_[0-9]*.deb \
   ./slurm-smd-slurmd_[0-9]*.deb \
-  ./slurm-smd_[0-9]*.deb
-rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
+  ./slurm-smd-slurmd-dbgsym_[0-9]*.ddeb \
+  ./slurm-smd_[0-9]*.deb \
+  ./slurm-smd-dbgsym_[0-9]*.ddeb
+rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 mkdir -p /var/spool/slurmd/
 cp -v /etc/nsswitch.conf{,.bak}
@@ -188,7 +197,8 @@ sed -i -E "s/^passwd:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 sed -i -E "s/^group:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 EOR
 
-COPY files/slurmd/ /
+COPY files/slurmd/etc/supervisor/* /etc/supervisor/
+COPY files/slurmd/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 6818/tcp
 ENTRYPOINT ["entrypoint.sh"]
@@ -214,8 +224,10 @@ apt-get -qq update
 apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-doc_[0-9]*.deb \
   ./slurm-smd-slurmdbd_[0-9]*.deb \
-  ./slurm-smd_[0-9]*.deb
-rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
+  ./slurm-smd-slurmdbd-dbgsym_[0-9]*.ddeb \
+  ./slurm-smd_[0-9]*.deb \
+  ./slurm-smd-dbgsym_[0-9]*.ddeb
+rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 EXPOSE 6819/tcp
@@ -242,8 +254,10 @@ apt-get -qq update
 apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-doc_[0-9]*.deb \
   ./slurm-smd-slurmrestd_[0-9]*.deb \
-  ./slurm-smd_[0-9]*.deb
-rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
+  ./slurm-smd-slurmrestd-dbgsym_[0-9]*.ddeb \
+  ./slurm-smd_[0-9]*.deb \
+  ./slurm-smd-dbgsym_[0-9]*.ddeb
+rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
 
 EXPOSE 6820/tcp
@@ -270,14 +284,18 @@ set -xeuo pipefail
 apt-get -qq update
 apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-client_[0-9]*.deb \
+  ./slurm-smd-client-dbgsym_[0-9]*.ddeb \
   ./slurm-smd-doc_[0-9]*.deb \
   ./slurm-smd-sackd_[0-9]*.deb \
-  ./slurm-smd_[0-9]*.deb
-rm *.deb && apt-get clean && rm -rf /var/lib/apt/lists/*
+  ./slurm-smd-sackd-dbgsym_[0-9]*.ddeb \
+  ./slurm-smd_[0-9]*.deb \
+  ./slurm-smd-dbgsym_[0-9]*.ddeb
+rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Prepare Directories
 mkdir -p /run/slurm/
 EOR
 
-COPY files/sackd/ /
+COPY files/sackd/etc/supervisor/* /etc/supervisor/
+COPY files/sackd/usr/local/bin/* /usr/local/bin/
 
 ENTRYPOINT ["entrypoint.sh"]
