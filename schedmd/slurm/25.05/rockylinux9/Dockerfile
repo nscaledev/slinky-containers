@@ -60,10 +60,26 @@ if [ "${SLURM_DIR}" != "$SLURM_RPM_DIR" ]; then
 fi
 rm -f ${SLURM_RPM_DIR}.tar.bz2
 tar -caf ${SLURM_RPM_DIR}.tar.bz2 $SLURM_RPM_DIR
-dnf -q -y builddep -D '_with_slurmrestd 1' -D '_with_jwt 1' -D '_with_yaml 1' -D '_with_hwloc --with-hwloc' -D '_with_numa 1' ${SLURM_RPM_DIR}/slurm.spec
-## FIXME: remove package installations after RPM spec makes them dependencies
+dnf -q -y builddep \
+  -D '_with_slurmrestd 1' \
+  -D '_with_jwt 1' \
+  -D '_with_yaml 1' \
+  -D '_with_hwloc --with-hwloc' \
+  -D '_with_numa 1' \
+  -D '_with_pmix --with-pmix' \
+  -D '_with_ucx --with-ucx' \
+  -D '_with_lua yes' \
+  -D '_with_freeipmi 1' \
+  -D '_with_hdf5 yes' \
+  -D '_with_libcurl yes' \
+  -D '_enable_debug 1' \
+  ${SLURM_RPM_DIR}/slurm.spec
+## FIXME: remove package installations after RPM spec makes them dependencies: cgroups/v2
 dnf -q -y install --setopt='install_weak_deps=False' \
   kernel-headers dbus-devel
+## FIXME: remove package installations after RPM spec makes them dependencies: --with-hdf5
+dnf -q -y install --setopt='install_weak_deps=False' \
+  hdf5-devel
 rpmbuild -ta --with slurmrestd --with jwt ${SLURM_RPM_DIR}.tar.bz2 >/dev/null
 ## Cleanup
 dnf clean all
@@ -119,6 +135,19 @@ dnf clean all
 EOR
 
 ################################################################################
+FROM base AS base-extra
+
+SHELL ["bash", "-c"]
+
+RUN <<EOR
+# Install Extra Packages
+set -xeuo pipefail
+dnf -q -y install --setopt='install_weak_deps=False' \
+  openmpi
+dnf clean all
+EOR
+
+################################################################################
 # SLURM: slurmctld
 # BUILD: `docker build --target=slurmctld -t [<registry>/]slurmctld:<tag> .`
 ################################################################################
@@ -139,7 +168,8 @@ dnf -q -y install --setopt='install_weak_deps=False' \
 rm *.rpm && dnf clean all
 EOR
 
-COPY files/slurmctld/ /
+COPY files/slurmctld/etc/supervisor/* /etc/supervisor/
+COPY files/slurmctld/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 6817/tcp
 ENTRYPOINT ["entrypoint.sh"]
@@ -148,7 +178,7 @@ ENTRYPOINT ["entrypoint.sh"]
 # SLURM: slurmd
 # BUILD: `docker build --target=slurmd -t [<registry>/]slurmd:<tag> .`
 ################################################################################
-FROM base AS slurmd
+FROM base-extra AS slurmd
 
 SHELL ["bash", "-c"]
 
@@ -174,7 +204,8 @@ sed -i -E "s/^passwd:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 sed -i -E "s/^group:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 EOR
 
-COPY files/slurmd/ /
+COPY files/slurmd/etc/supervisor/* /etc/supervisor/
+COPY files/slurmd/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 6818/tcp
 ENTRYPOINT ["entrypoint.sh"]
@@ -232,29 +263,30 @@ CMD ["0.0.0.0:6820"]
 # SLURM: sackd
 # BUILD: `docker build --target=sackd -t [<registry>/]sackd:<tag> .`
 ################################################################################
-FROM base AS sackd
+FROM base-extra AS sackd
 
 SHELL ["bash", "-c"]
 
 USER root
 WORKDIR /tmp/
 
-ENV KUBECTL_VERSION=1.33
+ADD https://dl.k8s.io/release/stable.txt kubernetes_stable.txt
 
 # Ref: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#install-using-native-package-management
 RUN <<EOR
 # Install kubectl
 set -xeuo pipefail
+VERSION="$(cat kubernetes_stable.txt | grep -Eo '^v[0-9]+\.[0-9]+')"
 cat <<EOF | tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/rpm/
+baseurl=https://pkgs.k8s.io/core:/stable:/${VERSION}/rpm/
 enabled=1
 gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v${KUBECTL_VERSION}/rpm/repodata/repomd.xml.key
+gpgkey=https://pkgs.k8s.io/core:/stable:/${VERSION}/rpm/repodata/repomd.xml.key
 EOF
 dnf -q -y install --setopt='install_weak_deps=False' kubectl
-dnf clean all
+rm *.txt && dnf clean all
 EOR
 
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
@@ -272,7 +304,8 @@ rm *.rpm && dnf clean all
 mkdir -p /run/slurm/
 EOR
 
-COPY files/sackd/ /
+COPY files/sackd/etc/supervisor/* /etc/supervisor/
+COPY files/sackd/usr/local/bin/* /usr/local/bin/
 
 ENTRYPOINT ["entrypoint.sh"]
 
@@ -301,13 +334,10 @@ rm *.rpm && dnf clean all
 mkdir -p /etc/authselect
 authselect select sssd with-mkhomedir --force
 rm -f /etc/ssh/ssh_host_*
-# Remove Packages
-dnf -q -y remove \
-  authselect
-dnf -q -y autoremove
 EOR
 
-COPY files/login/ /
+COPY files/login/etc/supervisor/* /etc/supervisor/
+COPY files/login/usr/local/bin/* /usr/local/bin/
 
 EXPOSE 22/tcp
 ENTRYPOINT ["entrypoint.sh"]
