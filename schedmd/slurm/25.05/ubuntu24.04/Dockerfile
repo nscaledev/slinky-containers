@@ -38,6 +38,12 @@ ARG SLURM_VERSION
 ENV SLURM_VERSION=${SLURM_VERSION}
 ARG SLURM_DIR
 
+# Nscale: lmod versions
+ARG LMOD_VERSION
+ENV LMOD_VERSION=${LMOD_VERSION}
+ENV LMOD_DIR=Lmod-${LMOD_VERSION}
+# end Nscale: lmod versions
+
 USER root
 WORKDIR /tmp/
 
@@ -53,11 +59,24 @@ apt-get -qq update
 apt-get -qq -y upgrade
 apt-get -qq -y install --no-install-recommends \
   build-essential fakeroot devscripts equivs
+# Nscale: add dependencies for GRES autodetection
+apt-get -qq -y install librocm-smi-dev libnvidia-ml-dev
+# end Nscale: add dependencies for GRES autodetection
+# Nscale: install lmod build deps
+apt-get -qq -y install bc curl pkg-config
+# end Nscale: install curl
 ## Patch
 find $(pwd)/patches/ -type f -name "*.patch" -print0 | sort -z | xargs -t0r -n1 patch -p1 -d ${SLURM_DIR} -i
 ## Build
 mk-build-deps -ir --tool='apt-get -qq -y -o Debug::pkgProblemResolver=yes --no-install-recommends' ${SLURM_DIR}/debian/control
 ( cd ${SLURM_DIR} && debuild -b -uc -us >/dev/null )
+# Nscale build lmod deb package
+mkdir -p ${LMOD_DIR}
+curl -sLO https://github.com/TACC/Lmod/archive/${LMOD_VERSION}.tar.gz
+tar --strip-components=1 -xvf ${LMOD_VERSION}.tar.gz -C ${LMOD_DIR}
+mk-build-deps -ir --tool='apt-get -qq -y -o Debug::pkgProblemResolver=yes --no-install-recommends' ${LMOD_DIR}/debian/control
+( cd ${LMOD_DIR} && debuild -b -uc -us )
+# end Nscale build lmod deb package
 ## Cleanup
 apt-get clean && rm -rf /var/lib/apt/lists/*
 EOR
@@ -93,6 +112,17 @@ for user in $(ls /home/); do
   userdel --remove $user
 done
 EOR
+
+# Nscale: add hpc user
+ARG HPC_USER=hpc
+ARG HPC_USER_UID=2000
+ARG HPC_USER_GID=2000
+
+RUN <<EOR
+groupadd --gid=${HPC_USER_GID} ${HPC_USER}
+useradd --uid=${HPC_USER_UID} --gid=${HPC_USER_GID} --shell=/usr/bin/bash ${HPC_USER}
+EOR
+# end Nscale: add hpc user
 
 COPY --from=build /tmp/*.deb /tmp/
 COPY --from=build /tmp/*.ddeb /tmp/
@@ -192,12 +222,61 @@ apt-get -qq -y install --no-install-recommends --fix-broken \
   ./slurm-smd-slurmd-dbgsym_[0-9]*.ddeb \
   ./slurm-smd_[0-9]*.deb \
   ./slurm-smd-dbgsym_[0-9]*.ddeb
+# Nscale: add sshd and dev packages to compute nodes
+apt-get -qq -y install --no-install-recommends \
+  openssh-server \
+  dbus-daemon \
+  authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
+apt-get -qq -y install \
+  autoconf \
+  autotools-dev \
+  bc \
+  cmake \
+  g++ \
+  gcc \
+  gfortran \
+  git \
+  iproute2 \
+  libevent-dev \
+  libpmix-bin \
+  libtool \
+  linux-headers-6.8.0-57-generic \
+  linux-source-6.8.0 \
+  pkg-config \
+  python3.12 \
+  python3-pip \
+  strace \
+  tar \
+  unzip \
+  vim \
+  wget \
+  xz-utils \
+  zlib1g-dev
+apt-get -qq -y install --no-install-recommends \
+  ./lmod_[0-9]*.deb
+apt-get -qq -y install --no-install-recommends \
+  libibumad-dev \
+  libibumad3 \
+  libibverbs-dev \
+  libpci-dev \
+  librdmacm-dev \
+  libudev-dev
+# end Nscale: add sshd and dev packages to compute nodes
 rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Configure
 mkdir -p /var/spool/slurmd/
 cp -v /etc/nsswitch.conf{,.bak}
 sed -i -E "s/^passwd:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
 sed -i -E "s/^group:[[:space:]]+/&slurm /g" /etc/nsswitch.conf
+# Nscale: setup lmod
+mkdir -p /etc/fish/conf.d
+rm -f /etc/profile.d/lmod.sh
+ln -s /usr/lmod/lmod/init/profile /etc/profile.d/z00_lmod.sh
+ln -s /usr/lmod/lmod/init/cshrc /etc/profile.d/z00_lmod.csh
+ln -s /usr/lmod/lmod/init/profile.fish /etc/fish/conf.d/z00_lmod.fish
+echo "/nscale/sw/modulefiles" > /usr/lmod/lmod/init/.modulespath
+# end Nscale: setup lmod
 EOR
 
 COPY files/slurmd/etc/supervisor/* /etc/supervisor/
@@ -339,6 +418,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 USER root
 WORKDIR /tmp/
 
+# Nscale: copy lmod deb pacakges from build
+COPY --from=build /tmp/lmod*.deb /tmp/
+# end Nscale: copy lmod deb pacakges from build
+
 # Ref: https://slurm.schedmd.com/quickstart_admin.html#pkg_install
 RUN <<EOR
 # Install Packages
@@ -349,6 +432,44 @@ apt-get -qq -y install --no-install-recommends \
   dbus-daemon \
   oddjob-mkhomedir \
   authselect sssd sssd-ad sssd-ldap sssd-dbus libpam-sss libnss-sss
+# Nscale: install additional dev packages and lmod
+apt-get -qq -y install \
+  autoconf \
+  autotools-dev \
+  bc \
+  cmake \
+  g++ \
+  gcc \
+  gfortran \
+  git \
+  iproute2 \
+  libevent-dev \
+  libpmix-bin \
+  libtool \
+  linux-headers-6.8.0-57-generic \
+  linux-source-6.8.0 \
+  pkg-config \
+  python3.12 \
+  python3-pip \
+  strace \
+  tar \
+  unzip \
+  vim \
+  wget \
+  xz-utils \
+  zlib1g-dev
+apt-get -qq -y install --no-install-recommends ./lmod_[0-9]*.deb
+# end Nscale: install additional dev packages and lmod
+
+# Nscale: configure lmod
+rm -f /etc/profile.d/lmod.sh
+mkdir -p /etc/fish/conf.d
+ln -s /usr/lmod/lmod/init/profile /etc/profile.d/z00_lmod.sh
+ln -s /usr/lmod/lmod/init/cshrc /etc/profile.d/z00_lmod.csh
+ln -s /usr/lmod/lmod/init/profile.fish /etc/fish/conf.d/z00_lmod.fish
+echo "/nscale/sw/modulefiles" > /usr/lmod/lmod/init/.modulespath
+# end Nscale: configure lmod
+
 rm *.deb && rm *.ddeb && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Configure
 mkdir -p /etc/authselect
